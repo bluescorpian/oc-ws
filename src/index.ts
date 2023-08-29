@@ -1,24 +1,13 @@
 import net from 'net';
 import { EventEmitter } from 'events';
 
-/**
- * Represents a WebSocket server.
- */
 export class WebSocketServer extends EventEmitter {
 	private tcpServer: net.Server;
 	clients: WebSocket[];
 
-	/**
-	 * Creates an instance of WebSocketServer.
-	 */
 	constructor() {
 		super();
 
-		/**
-		 * The underlying TCP server used for WebSocket connections.
-		 * @type {net.Server}
-		 * @private
-		 */
 		this.tcpServer = net.createServer((socket) => {
 			this.handleConnection(socket);
 		});
@@ -30,11 +19,6 @@ export class WebSocketServer extends EventEmitter {
 		this.clients = [];
 	}
 
-	/**
-	 * Handles a new incoming TCP socket connection and creates a WebSocket instance.
-	 * @param {net.Socket} socket - The incoming TCP socket.
-	 * @private
-	 */
 	private handleConnection(socket: net.Socket) {
 		const ws = new WebSocket(socket);
 		this.clients.push(ws);
@@ -68,18 +52,11 @@ export class WebSocketServer extends EventEmitter {
 	}
 }
 
-/**
- * Represents a WebSocket connection.
- */
 export class WebSocket extends EventEmitter {
 	private socket: net.Socket;
 	messageLength: number | null = null;
 	messageChunk: Buffer = Buffer.alloc(0);
 
-	/**
-	 * Creates an instance of WebSocket.
-	 * @param {net.Socket} socket - The underlying TCP socket for the WebSocket connection.
-	 */
 	constructor(socket: net.Socket) {
 		super();
 		this.socket = socket;
@@ -105,11 +82,6 @@ export class WebSocket extends EventEmitter {
 		});
 	}
 
-	/**
-	 * Handles incoming data on the WebSocket connection.
-	 * @param {Buffer} data - The data received on the connection.
-	 * @private
-	 */
 	private handleData(data: Buffer) {
 		try {
 			let dataIndex = 0;
