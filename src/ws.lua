@@ -1,6 +1,5 @@
-local component = require('component');
-local internet = component.getPrimary('internet');
 local io = require("io");
+local event = require('event')
 
 ---@class WebSocket
 ---@field address string
@@ -8,6 +7,8 @@ local io = require("io");
 ---@field path string
 ---@field key string
 ---@field readyState readyState
+---@field connection any
+---@field connectionCo thread
 local WebSocket = {}
 
 ---@enum readyState
@@ -31,49 +32,77 @@ local OPCODES = {
 
 WebSocket.OPCODES = OPCODES
 
----@param address string
----@param port? number
----@param path? string
 ---@return WebSocket
-function WebSocket:new(address, port, path)
+function WebSocket:new(socketOptions)
 	local socket = {}
 	setmetatable(socket, self)
 	self.__index = self;
 
 	if not path then path = '/' end
 
-	socket.address = address
-	socket.port = port or 80
-	socket.path = path
+	socket.internet = socketOptions.internet or require('component').getPrimary('internet')
+	socket.address = socketOptions.address
+	socket.port = socketOptions.port or 80
+	socket.path = socketOptions.path or '/'
 	socket.key = self.generateWebSocketKey()
-	socket.readyState = 0
+	socket.connection = internet.connect(socket.address, socket.port)
+	socket.readyState = READY_STATES.CONNECTING
+
+	socket.connectionCo = coroutine.create(function()
+		return self.connect(socket)
+	end)
 
 	return socket
 end
 
-function WebSocket:connect()
-	self.connection = internet.connect(self.address, self.port)
-	self.readyState = 0
-
-	local connectionSuccess, connectionError = pcall(function() return self.connection:finishConnect() end)
-
-	if not connectionSuccess then
-		self:close()
-		return false, connectionError
+function WebSocket:finishConnect()
+	if self.readyState == READY_STATES.OPEN then return true end
+	if self.connectionError then return nil, self.connectionError end
+	if coroutine.status(self.connectionCo) ~= 'dead' then
+		local coErr, connected, err = continue.resume(self.connectionCo)
+		err = err or coErr
+		if err then
+			self.connectionError = err
+			return nil, err
+		elseif type(connected) == 'boolean' then
+			return connected
+		end
 	end
+end
 
+---@private
+---@return boolean, string?
+function WebSocket:connect()
+	self.readyState = READY_STATES.CONNECTING
+
+	local yieldable = coroutine.isyieldable()
+	local connected = false
+	repeat
+		local c, connectionError = self.connection.finishConnect()
+		connected = c
+		if connectionError then return false, connectionError end
+		if yieldable then coroutine.yield() end
+	until connected
+
+	-- Perform handshake
 	local request = "GET " .. self.path .. " HTTP/1.1\r\n"
 	request = request .. "Host: " .. self.address .. "\r\n"
 	request = request .. "Upgrade: websocket\r\n"
-	request = request .. "Connection: Upgrade\r\n"
+	request = request .. "connection. Upgrade\r\n"
 	request = request .. "Sec-WebSocket-Key: " .. self.key .. "\r\n"
 	request = request .. "Sec-WebSocket-Protocol: chat\r\n"
 	request = request .. "Sec-WebSocket-Version: 13\r\n\r\n"
 
-	self.connection:write(request)
+	local written, err = self.connection.write(request)
+	if written == nil then return false, err end
 
-	-- TODO: rewrite to use 1 byte at a time
-	local handshakeResponse = self.connection.read()
+	local handshakeResponse = ''
+	while handshakeResponse:sub(-4) ~= '\r\n\r\n' do
+		local data, err = self:read(1)
+		if data == nil then return false, err end
+
+		handshakeResponse = handshakeResponse .. data
+	end
 
 	local statusLine = true
 	local handshakeHeaders = {}
@@ -103,35 +132,38 @@ function WebSocket:connect()
 		return false, 'Server doesn\'t support "chat" protocol'
 	end
 
-	return true, nil
-	-- TODO: handle left over message
+	self.readyState = READY_STATES.OPEN
+	return true
 end
 
 function WebSocket:send(message)
 	if not self:isOpen() then return end
 
 	local frame = self:createWebSocketFrame({ payload = message, opcode = OPCODES.TEXT })
-	self.connection:write(frame)
+	self.connection.write(frame)
 end
 
-function WebSocket:read()
-	if not self:isOpen() then return end
-
-	local websocketFrame = self:readWebSocketFrame()
-	if websocketFrame.opcode == OPCODES.CLOSE then
-		self:close()
-	elseif websocketFrame.opcode == OPCODES.PING then
-		self.connection:write(self:createWebSocketFrame({ opcode = OPCODES.PONG }))
-	elseif websocketFrame.opcode == OPCODES.TEXT then
-		return websocketFrame.payload
+function WebSocket:readMessage()
+	while self:isOpen() do
+		local websocketFrame = self:readWebSocketFrame()
+		if websocketFrame then
+			if websocketFrame.opcode == OPCODES.CLOSE then
+				self:close()
+			elseif websocketFrame.opcode == OPCODES.PING then
+				self.connection.write(self:createWebSocketFrame({ opcode = OPCODES.PONG }))
+			elseif websocketFrame.opcode == OPCODES.TEXT then
+				-- TODO: handle binary and fin bit
+				return websocketFrame.payload
+			end
+		end
 	end
 end
 
 function WebSocket:close()
 	self.readyState = READY_STATES.CLOSING
 	if self.connection then
-		self.connection:write(self:createWebSocketFrame({ opcode = OPCODES.CLOSE }))
-		self.connection:stop()
+		self.connection.write(self:createWebSocketFrame({ opcode = OPCODES.CLOSE }))
+		self.connection.stop()
 	end
 	self.connection = nil
 	self.readyState = READY_STATES.CLOSED
@@ -142,8 +174,26 @@ function WebSocket:isOpen()
 	return self.connection and self.readyState == READY_STATES.OPEN
 end
 
+---@return string?, string?
+function WebSocket:read(n)
+	local data = ''
+	local yieldable = coroutine.isyieldable()
+	while true do
+		local chunk, err = self.connection.read(n - #data)
+
+		if chunk == nil then
+			self:close()
+			return nil, err
+		elseif chunk ~= '' and #chunk then
+			data = data .. chunk
+			if #data == n then return data end
+		end
+		if yieldable then coroutine.yield() end
+	end
+end
+
 function WebSocket:readWebSocketFrame()
-	local frameHeader = self.connection:read(2)
+	local frameHeader = self.connection.read(2)
 	local frameHeaderBytes = { frameHeader:byte(1), frameHeader:byte(2) }
 	-- TODO: handle connection closed
 
@@ -168,24 +218,19 @@ function WebSocket:readWebSocketFrame()
 			payloadLength = (payloadLength << 8) | extendedLength:byte(i)
 		end
 	end
-
-	if fin then
-		local payload = nil
-		if payloadLength then
-			-- TODO: handle masked data
-			payload = socket:read(payloadLength)
-		end
-
-		return {
-			fin = fin,
-			opcode = opcode,
-			masked = masked,
-			payloadLength = payloadLength,
-			payload = payload
-		}
-	else
-		-- TODO: handle fin bit
+	local payload = nil
+	if payloadLength then
+		-- TODO: handle masked data
+		payload = socket:read(payloadLength)
 	end
+
+	return {
+		fin = fin,
+		opcode = opcode,
+		masked = masked,
+		payloadLength = payloadLength,
+		payload = payload
+	}
 end
 
 ---@return string
