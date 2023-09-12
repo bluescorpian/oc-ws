@@ -37,6 +37,26 @@ local function coroutineArguments()
 	print('Return: ' .. value)
 end
 
-coroutineArguments()
+local function coroutineErrors()
+	local co = coroutine.create(function()
+		error('Test error')
+	end)
+
+	print(coroutine.resume(co))
+end
+
+local function coroutineReturns()
+	local co = coroutine.create(function()
+		coroutine.yield('Yield hello world')
+		return 'Hello World!'
+	end)
+	print(coroutine.resume(co))
+	print(coroutine.resume(co))
+	print(coroutine.resume(co))
+end
+
+-- coroutineArguments()
 -- wrappedCoroutines()
 -- subYielding()
+-- coroutineErrors()
+coroutineReturns()
