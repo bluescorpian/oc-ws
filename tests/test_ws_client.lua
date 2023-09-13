@@ -19,5 +19,5 @@ while true do
 	if err then return print('Websocket Error: ' .. err) end
 	if message then print('Message Received: ' .. message) end
 
-	if event.pull(1) == 'interrupted' then return end
+	if event.pull() == 'interrupted' then return end
 end

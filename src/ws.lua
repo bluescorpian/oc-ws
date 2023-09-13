@@ -9,6 +9,7 @@ local io = require("io");
 ---@field readyState readyState
 ---@field connection any
 ---@field connectionCo thread
+---@field buffer string
 local WebSocket = {}
 WebSocket.__index = WebSocket;
 
@@ -46,6 +47,7 @@ function WebSocket.new(socketOptions)
 	socket.connection = socket.internet.connect(socket.address, socket.port)
 	socket.readyState = READY_STATES.CONNECTING
 	socket.connectionCo = coroutine.create(function() return socket:connectWebsocket() end)
+	socket.buffer = ''
 
 	return socket
 end
@@ -76,18 +78,31 @@ function WebSocket:send(message)
 end
 
 function WebSocket:readMessage()
-	local websocketFrame = self:readWebSocketFrame()
-	if websocketFrame then
-		if websocketFrame.opcode == OPCODES.CLOSE then
-			self:close()
-		elseif websocketFrame.opcode == OPCODES.PING then
-			print('ping')
-			self.connection.write(self:createWebSocketFrame({ opcode = OPCODES.PONG }))
-		elseif websocketFrame.opcode == OPCODES.TEXT then
-			-- TODO: handle binary and fin bit
-			return websocketFrame.payload
-		end
+	if not self.readMessageCo or coroutine.status(self.readMessageCo) == 'dead' then
+		self.readMessageCo = coroutine.create(function()
+			while true do
+				local websocketFrame, err = self:readWebSocketFrame()
+				if websocketFrame == nil then return nil, err end
+				if websocketFrame then
+					if websocketFrame.opcode == OPCODES.CLOSE then
+						self:close()
+					elseif websocketFrame.opcode == OPCODES.PING then
+						print('ping')
+						self.connection.write(self:createWebSocketFrame({ opcode = OPCODES.PONG }))
+					elseif websocketFrame.opcode == OPCODES.TEXT then
+						-- TODO: handle binary and fin bit
+						coroutine.yield(websocketFrame.payload)
+					end
+				end
+			end
+		end)
 	end
+	local success, message, err = coroutine.resume(self.readMessageCo)
+	if not success then
+		err = message
+		message = nil
+	end
+	return message, err
 end
 
 function WebSocket:close()
@@ -96,7 +111,6 @@ function WebSocket:close()
 		self.connection.write(self:createWebSocketFrame({ opcode = OPCODES.CLOSE }))
 		self.connection.close()
 	end
-	self.connection = nil
 	self.readyState = READY_STATES.CLOSED
 end
 
@@ -179,30 +193,41 @@ function WebSocket:performHandshake()
 	return true
 end
 
+-- TODO: implement gmatch filter
 ---@return string?, string?
 function WebSocket:read(n)
-	local data = ''
 	local yieldable = coroutine.isyieldable()
+	if self.buffer == nil then self.buffer = '' end
+
 	while true do
-		local chunk, err = self.connection.read(n - #data)
+		if n == nil then
+			local buf = self.buffer
+			self.buffer = ''
+			return buf
+		elseif #self.buffer >= n then
+			local data = string.sub(self.buffer, 1, n)
+			self.buffer = string.sub(self.buffer, n + 1)
+			return data
+		end
+
+		local chunk, err = self.connection.read()
 
 		if chunk == nil then
 			self:close()
 			return nil, err
-		elseif chunk ~= '' and #chunk then
-			if #chunk == n and not #data then
-				return chunk
-			else
-				data = data .. chunk
-				if #data == n then return data end
-			end
 		end
-		if yieldable then coroutine.yield() end
+
+		self.buffer = self.buffer .. chunk
+
+		if yieldable and chunk == '' then
+			coroutine.yield()
+		end
 	end
 end
 
 function WebSocket:readWebSocketFrame()
-	local frameHeader = self:read(2)
+	local frameHeader, err = self:read(2)
+	if frameHeader == nil then return nil, err end
 	local frameHeaderBytes = { frameHeader:byte(1), frameHeader:byte(2) }
 	-- TODO: handle connection closed
 
@@ -230,7 +255,8 @@ function WebSocket:readWebSocketFrame()
 	local payload = nil
 	if payloadLength then
 		-- TODO: handle masked data
-		payload = self:read(payloadLength)
+		payload, err = self:read(payloadLength)
+		if payload == nil then return nil, err end
 	end
 
 	return {
@@ -245,7 +271,7 @@ end
 ---@return string
 function WebSocket:createWebSocketFrame(frameOptions)
 	local fin = true
-	local opcode = 1
+	local opcode = OPCODES.TEXT
 	local mask = false
 	local payload = ""
 
@@ -263,6 +289,8 @@ function WebSocket:createWebSocketFrame(frameOptions)
 
 	-- Creates 8 bit binary with first byte, the Fin bit (1 bit) set, RSV1-3 bits (3 bits) left empty, and Opcode (4 bits) added to the end
 	frame[1] = fin and 0x80 or 0x00 | opcode
+
+	print(frame[1])
 
 	local maskBit = mask and 0x80 or 0x00
 	if length <= 125 then
