@@ -1,4 +1,5 @@
 import { WebSocketServer } from 'ws';
+import readline from 'readline';
 
 const wss = new WebSocketServer({ port: 8080 });
 
@@ -6,25 +7,35 @@ wss.on('connection', function connection(ws) {
 	console.log('Connection opened');
 	ws.on('error', console.error);
 
-	ws.on('message', function message(data) {
+	ws.on('message', (data) => {
 		console.log('received: %s', data);
 	});
-	ws.on('close', () => {
+
+	ws.once('close', () => {
 		console.log('Connection closed');
-		clearInterval(interval);
+		rl.off('line', handleLine);
 	});
 
 	ws.on('ping', () => {
 		console.log('Ping');
 		ws.pong();
 	});
-	ws.on('pong', () => console.log('Pong'));
+	ws.on('pong', () => {
+		console.log('Pong');
+	});
 
 	ws.send('Hello World!');
 
-	const interval = setInterval(() => {
-		ws.ping();
-	}, 5000);
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	});
+
+	function handleLine(input) {
+		ws.send(input);
+	}
+
+	rl.on('line', handleLine);
 });
 
 console.log('Server listening on port 8080');

@@ -1,10 +1,11 @@
-local customDebug = {}
+local computer = require('computer')
+local blueDebug = {}
 
-function customDebug.print(tbl)
-	print(customDebug.format(tbl))
+function blueDebug.print(tbl)
+	print(blueDebug.format(tbl))
 end
 
-function customDebug.format(value, indentSize)
+function blueDebug.format(value, indentSize)
 	if not indentSize then indentSize = 0 end
 
 	if type(value) == "table" then
@@ -12,7 +13,7 @@ function customDebug.format(value, indentSize)
 		local isArr = isArray(value)
 		if isArr then
 			for i, v in ipairs(value) do
-				local valueStr = indent(indentSize + 1) .. customDebug.format(v)
+				local valueStr = indent(indentSize + 1) .. blueDebug.format(v)
 
 				str = str .. valueStr
 				-- last item
@@ -33,10 +34,10 @@ function customDebug.format(value, indentSize)
 				if (type(k) == 'string' and isVariableName(k)) then
 					keyStr = tostring(k)
 				else
-					keyStr = '[' .. customDebug.format(k) .. ']'
+					keyStr = '[' .. blueDebug.format(k) .. ']'
 				end
 
-				local valueStr = customDebug.format(v, indentSize + 1)
+				local valueStr = blueDebug.format(v, indentSize + 1)
 
 				str = str .. indent(indentSize + 1) .. keyStr .. " = " .. valueStr
 				-- last item
@@ -102,18 +103,49 @@ function isArray(table)
 	return maxIndex == #table
 end
 
-local myTable = {
-	name = "John",
-	age = 30,
-	address = {
-		street = "123 Main St",
-		city = "Anytown",
-	},
-	hobbies = { "Reading", "Gaming", "Cooking" },
-	[1] = true,
-	["hello "] = false
-}
+local timers = {}
 
-customDebug.print(myTable)
+function blueDebug.time(label)
+	assert(type(label) == 'string', 'Expected string, got ' .. type(label))
+	timers[label] = computer.uptime()
+end
 
-return customDebug
+function blueDebug.timeEnd(label)
+	assert(type(label) == 'string', 'Expected string, got ' .. type(label))
+	assert(timers[label] ~= nil, 'Timer "' .. label .. '" does not exist.')
+	local formattedTime
+	local time = computer.uptime() - timers[label]
+	if time > 1 then
+		formattedTime = blueDebug.round(time, 3) .. 's'
+	else
+		-- formattedTime = string.format("%.2f", (time * 1000)) .. 'ms'
+		formattedTime = blueDebug.round(time * 1000, 2) .. 'ms'
+	end
+	print(label .. ': ' .. formattedTime)
+end
+
+function blueDebug.round(number, decimalPlaces)
+	local multiplier = 10 ^ decimalPlaces
+	return math.floor(number * multiplier + 0.5) / multiplier
+end
+
+function blueDebug.require(packageName)
+	package.loaded[packageName] = nil
+	return require(packageName)
+end
+
+-- local myTable = {
+-- 	name = "John",
+-- 	age = 30,
+-- 	address = {
+-- 		street = "123 Main St",
+-- 		city = "Anytown",
+-- 	},
+-- 	hobbies = { "Reading", "Gaming", "Cooking" },
+-- 	[1] = true,
+-- 	["hello "] = false
+-- }
+
+-- customDebug.print(myTable)
+
+return blueDebug

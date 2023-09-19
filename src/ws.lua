@@ -1,4 +1,6 @@
 local io = require("io");
+local bit32 = require('bit32')
+local bdebug = require('bdebug')
 
 ---@class WebSocket
 ---@field internet any
@@ -44,7 +46,9 @@ function WebSocket.new(socketOptions)
 	socket.port = socketOptions.port or 80
 	socket.path = socketOptions.path or '/'
 	socket.key = socket.generateWebSocketKey()
+	bdebug.time('connect')
 	socket.connection = socket.internet.connect(socket.address, socket.port)
+	bdebug.timeEnd('connect')
 	socket.readyState = READY_STATES.CONNECTING
 	socket.connectionCo = coroutine.create(function() return socket:connectWebsocket() end)
 	socket.buffer = ''
@@ -77,6 +81,7 @@ function WebSocket:send(message)
 	self.connection.write(frame)
 end
 
+---@return string?, string?
 function WebSocket:readMessage()
 	if not self.readMessageCo or coroutine.status(self.readMessageCo) == 'dead' then
 		self.readMessageCo = coroutine.create(function()
@@ -272,7 +277,7 @@ end
 function WebSocket:createWebSocketFrame(frameOptions)
 	local fin = true
 	local opcode = OPCODES.TEXT
-	local mask = false
+	local mask = true
 	local payload = ""
 
 	-- Check if frameOptions is provided and update variables accordingly
@@ -288,9 +293,7 @@ function WebSocket:createWebSocketFrame(frameOptions)
 	local frame = {}
 
 	-- Creates 8 bit binary with first byte, the Fin bit (1 bit) set, RSV1-3 bits (3 bits) left empty, and Opcode (4 bits) added to the end
-	frame[1] = fin and 0x80 or 0x00 | opcode
-
-	print(frame[1])
+	frame[1] = (fin and 0x80 or 0x00) | opcode
 
 	local maskBit = mask and 0x80 or 0x00
 	if length <= 125 then
@@ -319,12 +322,12 @@ function WebSocket:createWebSocketFrame(frameOptions)
 
 		-- Mask the message data
 		for i = 1, length do
-			local maskByte = maskingKey:byte((i - 1) % 4 + 1)
-			frame[#frame + 1] = string.char(bit32.bxor(payload:byte(i), maskByte))
+			local maskByte = maskingKey[(i - 1) % 4 + 1]
+			frame[#frame + 1] = bit32.bxor(payload:byte(i), maskByte) -- TODO: inspect
 		end
 	else
 		for i = 1, length do
-			frame[#frame + 1] = payload:sub(i, i)
+			frame[#frame + 1] = string.byte(payload:sub(i, i))
 		end
 	end
 
