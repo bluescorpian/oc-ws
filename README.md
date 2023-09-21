@@ -6,12 +6,11 @@
 
 To use oc-ws in your OpenComputers project, follow these steps:
 
-1. Download the oc-ws library file from the [GitHub repository](https://github.com/bluescorpian/oc-ws).
-
-2. Save the `ws.lua` file in your OpenComputers project directory.
-
-3. In your OpenComputers program, import the oc-ws library using the `require` function:
-
+1. Run the following command:
+   ```bash
+   wget https://raw.githubusercontent.com/bluescorpian/oc-ws/main/src/ws.lua /usr/lib/ws.lua
+   ```
+2. In your OpenComputers program, import the oc-ws library using the `require` function:
    ```lua
    local WebSocket = require("ws")
    ```
