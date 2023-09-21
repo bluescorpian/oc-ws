@@ -1,6 +1,6 @@
 local io = require("io");
 local bit32 = require('bit32')
-local bdebug = require('bdebug')
+-- local bdebug = require('bdebug')
 
 ---@class WebSocket
 ---@field internet any
@@ -9,9 +9,11 @@ local bdebug = require('bdebug')
 ---@field path string
 ---@field key string
 ---@field readyState readyState
----@field connection any
----@field connectionCo thread
----@field buffer string
+---@field private connection any
+---@field private connectionCo thread
+---@field private readMessageCo thread?
+---@field private buffer string
+---@field private messageBuffer string?
 local WebSocket = {}
 WebSocket.__index = WebSocket;
 
@@ -33,22 +35,29 @@ local OPCODES = {
 	PING = 0x9,
 	PONG = 0xA
 }
-
 WebSocket.OPCODES = OPCODES
+
+---@enum messageType
+local MESSAGE_TYPES = {
+	TEXT = 0,
+	PING = 1,
+	PONG = 2,
+	CLOSE = 3
+}
+WebSocket.MESSAGE_TYPES = MESSAGE_TYPES
 
 ---@return WebSocket
 function WebSocket.new(socketOptions)
 	local socket = {}
 	setmetatable(socket, WebSocket)
-	-- TODO: handle no errors with no address or internet
+	assert(type(socketOptions.address) == 'string', 'socketOptions.address must be a string')
 	socket.internet = socketOptions.internet or require('component').getPrimary('internet')
+	assert(socket.internet.isTcpEnabled(), 'TCP must be enabled to use websocket')
 	socket.address = socketOptions.address
 	socket.port = socketOptions.port or 80
 	socket.path = socketOptions.path or '/'
 	socket.key = socket.generateWebSocketKey()
-	bdebug.time('connect')
 	socket.connection = socket.internet.connect(socket.address, socket.port)
-	bdebug.timeEnd('connect')
 	socket.readyState = READY_STATES.CONNECTING
 	socket.connectionCo = coroutine.create(function() return socket:connectWebsocket() end)
 	socket.buffer = ''
@@ -81,33 +90,52 @@ function WebSocket:send(message)
 	self.connection.write(frame)
 end
 
----@return string?, string?
+function WebSocket:ping(data)
+	return self.connection.write(self:createWebSocketFrame({ opcode = OPCODES.PING, payload = data }))
+end
+
+function WebSocket:pong(data)
+	return self.connection.write(self:createWebSocketFrame({ opcode = OPCODES.PONG, payload = data }))
+end
+
+---@return messageType?, string?, string?
 function WebSocket:readMessage()
 	if not self.readMessageCo or coroutine.status(self.readMessageCo) == 'dead' then
 		self.readMessageCo = coroutine.create(function()
 			while true do
 				local websocketFrame, err = self:readWebSocketFrame()
-				if websocketFrame == nil then return nil, err end
+				if websocketFrame == nil then return nil, nil, err end
 				if websocketFrame then
-					if websocketFrame.opcode == OPCODES.CLOSE then
-						self:close()
-					elseif websocketFrame.opcode == OPCODES.PING then
-						print('ping')
-						self.connection.write(self:createWebSocketFrame({ opcode = OPCODES.PONG }))
-					elseif websocketFrame.opcode == OPCODES.TEXT then
-						-- TODO: handle binary and fin bit
-						coroutine.yield(websocketFrame.payload)
+					if websocketFrame.opcode == OPCODES.TEXT then
+						if websocketFrame.fin then
+							coroutine.yield(MESSAGE_TYPES.TEXT, self.messageBuffer or websocketFrame.payload)
+							self.messageBuffer = nil
+						else
+							self.messageBuffer = (self.messageBuffer or "") .. websocketFrame.payload
+						end
+					else
+						self.messageBuffer = nil
+						if websocketFrame.opcode == OPCODES.CLOSE then
+							self:close()
+							coroutine.yield(MESSAGE_TYPES.CLOSE)
+						elseif websocketFrame.opcode == OPCODES.PING then
+							coroutine.yield(MESSAGE_TYPES.PING, websocketFrame.payload)
+						elseif websocketFrame.opcode == OPCODES.PONG then
+							coroutine.yield(MESSAGE_TYPES.PONG, websocketFrame.payload)
+						else
+							error('Unsupported WebSocket opcode received: ' .. tostring(websocketFrame.opcode))
+						end
 					end
 				end
 			end
 		end)
 	end
-	local success, message, err = coroutine.resume(self.readMessageCo)
+	local success, messageType, message, err = coroutine.resume(self.readMessageCo)
 	if not success then
-		err = message
-		message = nil
+		err = messageType
+		messageType = nil
 	end
-	return message, err
+	return messageType, message, err
 end
 
 function WebSocket:close()
@@ -153,7 +181,7 @@ function WebSocket:performHandshake()
 	request = request .. "Upgrade: websocket\r\n"
 	request = request .. "Connection: Upgrade\r\n"
 	request = request .. "Sec-WebSocket-Key: " .. self.key .. "\r\n"
-	request = request .. "Sec-WebSocket-Protocol: chat\r\n"
+	-- request = request .. "Sec-WebSocket-Protocol: chat\r\n"
 	request = request .. "Sec-WebSocket-Version: 13\r\n\r\n"
 
 	local written, err = self.connection.write(request)
@@ -172,6 +200,8 @@ function WebSocket:performHandshake()
 	for line in handshakeResponse:gmatch("[^\r\n]+") do
 		if statusLine then
 			local statusCode = string.match(line, "HTTP/%d%.%d (%d%d%d)")
+			print(line)
+			print(statusCode)
 			if (statusCode ~= '101') then
 				return false, 'Wrong HTTP Code'
 			end
@@ -198,7 +228,6 @@ function WebSocket:performHandshake()
 	return true
 end
 
--- TODO: implement gmatch filter
 ---@return string?, string?
 function WebSocket:read(n)
 	local yieldable = coroutine.isyieldable()
@@ -234,7 +263,6 @@ function WebSocket:readWebSocketFrame()
 	local frameHeader, err = self:read(2)
 	if frameHeader == nil then return nil, err end
 	local frameHeaderBytes = { frameHeader:byte(1), frameHeader:byte(2) }
-	-- TODO: handle connection closed
 
 	-- get first bit, and last 4 bits
 	local fin = frameHeaderBytes[1] & 0x80 == 0x80
@@ -323,7 +351,7 @@ function WebSocket:createWebSocketFrame(frameOptions)
 		-- Mask the message data
 		for i = 1, length do
 			local maskByte = maskingKey[(i - 1) % 4 + 1]
-			frame[#frame + 1] = bit32.bxor(payload:byte(i), maskByte) -- TODO: inspect
+			frame[#frame + 1] = bit32.bxor(payload:byte(i), maskByte)
 		end
 	else
 		for i = 1, length do

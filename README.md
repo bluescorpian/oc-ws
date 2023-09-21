@@ -1,42 +1,73 @@
-# oc-ws:
+# oc-ws
 
-oc-ws is a WebSocket server and client library designed to facilitate seamless communication between Node.js applications and OpenComputers systems.
+**oc-ws** a WebSocket library for OpenComputers.
 
 ## Installation
 
-To get started with oc-ws, simply install the package using npm:
+To use oc-ws in your OpenComputers project, follow these steps:
 
-```bash
-npm install oc-ws
-```
+1. Download the oc-ws library file from the [GitHub repository](https://github.com/bluescorpian/oc-ws).
+
+2. Save the `ws.lua` file in your OpenComputers project directory.
+
+3. In your OpenComputers program, import the oc-ws library using the `require` function:
+
+   ```lua
+   local WebSocket = require("ws")
+   ```
 
 ## Usage
 
-### Setting Up a WebSocket Server
+Here's a basic example of how to create a WebSocket client and send a message using oc-ws:
 
-```javascript
-import { WebSocketServer } from 'oc-ws';
+```lua
+-- Import the oc-ws library
+local WebSocket = require("ws")
 
-const server = new WebSocketServer();
+-- Create a new WebSocket instance
+local ws = WebSocket.new({
+    address = "ws://example.com",
+    port = 80,
+    path = "/websocket",
+})
 
-server.on('connection', (ws) => {
-	console.log('New WebSocket connection established.');
+-- Connect to the WebSocket server
+while true do
+	local connected, err = socket:finishConnect()
+	if connected then break end
+	if err then return print('Failed to connect: ' .. err) end
+	if event.pull(1) == 'interrupted' then return end
+end
+print("Connected to WebSocket server!")
 
-	ws.on('message', (message) => {
-		console.log('Received message:', message);
-		ws.send('Message received: ' + message);
-	});
+-- Send a message
+ws:send("Hello, WebSocket!")
 
-	ws.on('close', () => {
-		console.log('WebSocket connection closed.');
-	});
-});
+-- Read incoming messages
+while true do
+	local messageType, message, err = ws:readMessage()
+	if err then return print('Websocket Error: ' .. err) end
+	if messageType == WebSocket.MESSAGE_TYPES.TEXT then
+		print('Message Received: ' .. message)
+	elseif messageType == WebSocket.MESSAGE_TYPES.PING then
+		print('Ping')
+		ws:pong(message)
+	elseif messageType == WebSocket.MESSAGE_TYPES.PONG then
+		print('Pong')
+	end
 
-server.listen(8080, () => {
-	console.log('WebSocket server is listening on port 8080.');
-});
+	if event.pull(5) == 'interrupted' then return end
+end
+
+
+-- Close the WebSocket connection when done
+ws:close()
 ```
 
 ## License
 
-This project is licensed under the [AGPL-3.0-or-later](https://www.gnu.org/licenses/agpl-3.0.en.html) license.
+oc-ws is licensed under the [GNU Affero General Public License (AGPL)](https://www.gnu.org/licenses/agpl-3.0.html).
+
+## Credits
+
+I used [feldim2425](https://github.com/feldim2425/OC-Programs/tree/master/websocket_client) project to help with my implementation.

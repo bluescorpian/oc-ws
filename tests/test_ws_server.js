@@ -24,7 +24,7 @@ wss.on('connection', function connection(ws) {
 		console.log('Pong');
 	});
 
-	ws.send('Hello World!');
+	ws.send('Hello from server!');
 
 	const rl = readline.createInterface({
 		input: process.stdin,
@@ -36,6 +36,8 @@ wss.on('connection', function connection(ws) {
 	}
 
 	rl.on('line', handleLine);
+
+	ws.ping();
 });
 
 console.log('Server listening on port 8080');
