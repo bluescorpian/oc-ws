@@ -20,9 +20,10 @@ end
 
 local function skip(name, why) say(("skip %s (%s)"):format(name, why)) end
 
--- The sandbox has no collectgarbage; yielding gives the collector its turn.
+-- The sandbox has no collectgarbage, but OpenComputers' kernel runs a full
+-- collection every 10th time the machine resumes, so 11 yields guarantee one.
 local function freeKiB()
-	for _ = 1, 5 do os.sleep(0) end
+	for _ = 1, 11 do os.sleep(0) end
 	return computer.freeMemory() // 1024
 end
 
@@ -42,6 +43,7 @@ local function echoes(conn, label)
 	local data, kind = conn:receive(10)
 	check(label .. ": text echo", data == "hello " .. label and kind == "text", data or kind)
 	local blob = ("\0\1\254\255"):rep(16 * 1024)
+	say(("     %s: %d KiB free before the 64 KiB send"):format(label, freeKiB()))
 	local sent, sendErr = conn:send(blob, true)
 	if sent then data, kind = conn:receive(30) end
 	check(label .. ": 64 KiB binary echo", data == blob and kind == "binary",
@@ -97,7 +99,7 @@ else
 			local okEcho, echoErr = pcall(echoes, c, label)
 			check(label .. ": echoes run without raising an error", okEcho, echoErr)
 			c:close()
-			check(label .. ": closes with 1000", c.closeCode == 1000, c.closeCode)
+			check(label .. ": closes with 1000", c.closeCode == 1000, ("%s %s"):format(c.closeCode, c.closeReason))
 		end
 	end
 

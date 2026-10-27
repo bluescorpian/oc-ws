@@ -362,7 +362,7 @@ function Connection:flushAll(deadline)
 		wait(deadline)
 		self:flush()
 	end
-	if self.state == "closed" then return nil, "connection closed" end
+	if self.state == "closed" then return nil, "connection closed: " .. tostring(self.closeReason) end
 	return true
 end
 

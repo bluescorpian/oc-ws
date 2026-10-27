@@ -177,8 +177,7 @@ connections at once.
 OpenComputers' internet card only offers plain TCP, so the encryption runs in
 Lua, using [libtls13](https://github.com/OpenPrograms/Fingercomp-Programs/tree/master/libtls13)
 by Fingercomp. Install it with `oppm install libtls13`, fit at least a
-**tier 2 data card** and **two tier 3.5 memory sticks** (libtls13 takes
-about 1.2 MiB once loaded), and connect with a `wss://` URL:
+**tier 2 data card**, and connect with a `wss://` URL:
 
 ```lua
 local conn = assert(ws.connect("wss://example.com/socket"))
@@ -281,8 +280,8 @@ Opens a connection and waits until it is ready.
   To reach a server on the same machine or your LAN, add an allow rule ahead
   of `"deny private"` in the `filteringRules` list of `opencomputers.cfg`,
   e.g. `"allow ip:192.168.1.10"`.
-* **`wss://`** needs libtls13, two tier 3.5 memory sticks, and a tier 2
-  data card, or tier 3 for P-256 certificates. See [Secure connections](#secure-connections-wss).
+* **`wss://`** needs libtls13 and a tier 2 data card, or tier 3 for P-256
+  certificates. See [Secure connections](#secure-connections-wss).
 * **No compression.** oc-ws does not offer the `permessage-deflate`
   extension, so servers send uncompressed messages.
 
