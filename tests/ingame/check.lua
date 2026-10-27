@@ -43,7 +43,10 @@ local function echoes(conn, label)
 	local data, kind = conn:receive(10)
 	check(label .. ": text echo", data == "hello " .. label and kind == "text", data or kind)
 	local blob = ("\0\1\254\255"):rep(16 * 1024)
-	say(("     %s: %d KiB free before the 64 KiB send"):format(label, freeKiB()))
+	-- No forced collection here: a real program sends with whatever garbage
+	-- the handshake and earlier messages left.
+	say(("     %s: %d KiB free before the 64 KiB send, garbage included"):format(
+		label, computer.freeMemory() // 1024))
 	local sent, sendErr = conn:send(blob, true)
 	if sent then data, kind = conn:receive(30) end
 	check(label .. ": 64 KiB binary echo", data == blob and kind == "binary",

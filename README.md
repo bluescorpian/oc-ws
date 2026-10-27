@@ -176,7 +176,8 @@ connections at once.
 
 OpenComputers' internet card only offers plain TCP, so the encryption runs in
 Lua, using [libtls13](https://github.com/OpenPrograms/Fingercomp-Programs/tree/master/libtls13)
-by Fingercomp. Install it with `oppm install libtls13`, fit at least a
+by Fingercomp. It takes about 560 KiB of memory once loaded (oc-ws itself
+takes about 40 KiB). Install it with `oppm install libtls13`, fit at least a
 **tier 2 data card**, and connect with a `wss://` URL:
 
 ```lua
