@@ -4,7 +4,7 @@
 -- Needs Lua 5.3 (the OpenComputers default) and an internet card with TCP
 -- enabled. wss:// additionally needs libtls13 and a tier 2 data card.
 
-local ws = { _VERSION = "2.0.0-dev" }
+local ws = { _VERSION = "2.0.0" }
 
 local GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 -- How long to wait between polls when no internet_ready signal arrives. The
