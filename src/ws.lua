@@ -39,12 +39,33 @@ function platform.random(n)
 	return string.char(table.unpack(bytes))
 end
 
+-- OpenOS's filtered event.pull throws away every signal that does not match,
+-- so signals oc-ws pushes while one of its own waits is running are held back
+-- and pushed once the wait returns.
+local waiting, deferred = 0, {}
+
+local function push(...)
+	if waiting > 0 then
+		deferred[#deferred + 1] = table.pack(...)
+	else
+		platform.push(...)
+	end
+end
+
 -- Sleeps until data may have arrived, at most POLL_INTERVAL and never past
 -- the deadline.
 local function wait(deadline)
 	local t = POLL_INTERVAL
 	if deadline then t = math.max(0, math.min(t, deadline - platform.uptime())) end
-	platform.pull(t, "internet_ready")
+	waiting = waiting + 1
+	local ok, err = pcall(platform.pull, t, "internet_ready")
+	waiting = waiting - 1
+	if waiting == 0 and #deferred > 0 then
+		local signals = deferred
+		deferred = {}
+		for _, s in ipairs(signals) do platform.push(table.unpack(s, 1, s.n)) end
+	end
+	if not ok then error(err, 0) end
 end
 
 ---------------------------------------------------------------------------
@@ -370,7 +391,7 @@ end
 
 function Connection:deliver(data, kind)
 	if self.listening then
-		platform.push("websocket_message", self.id, data, kind)
+		push("websocket_message", self.id, data, kind)
 	else
 		self.queue[#self.queue + 1] = { data, kind }
 	end
@@ -378,7 +399,7 @@ end
 
 function Connection:deliverClose()
 	if self.listening or self.wasListening then
-		platform.push("websocket_closed", self.id, self.closeCode, self.closeReason)
+		push("websocket_closed", self.id, self.closeCode, self.closeReason)
 	end
 end
 
@@ -602,7 +623,7 @@ end
 function Connection:listen()
 	if self.listening or self.state == "closed" then return end
 	self.listening, self.wasListening = true, true
-	for _, msg in ipairs(self.queue) do platform.push("websocket_message", self.id, msg[1], msg[2]) end
+	for _, msg in ipairs(self.queue) do push("websocket_message", self.id, msg[1], msg[2]) end
 	self.queue = {}
 	self.readyHandler = function(_, _, sockId)
 		if sockId == nil or sockId == self.sockId then self:pump() end
