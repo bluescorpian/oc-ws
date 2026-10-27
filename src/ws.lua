@@ -237,39 +237,40 @@ local function tlsTransport(conn, sock, u, tlsOpts, deadline)
 	end
 	function raw.close() pcall(sock.close) end
 
-	-- Record the server's public key as the handshake verifies its signature,
-	-- so it can be compared against a pinned fingerprint.
-	local base = platform.tlsProfile(tls)
-	local serverKey
-	local profile = setmetatable({}, { __index = base })
-	function profile.signatureAlgorithms()
-		local algs = base.signatureAlgorithms()
-		for i, alg in ipairs(algs) do
-			algs[i] = setmetatable({
-				decodePublicKey = function(self, pkInfo)
-					serverKey = pkInfo.subjectPublicKey:toBytes()
-					return alg.decodePublicKey(self, pkInfo)
-				end,
-			}, { __index = alg })
-		end
-		return algs
+	-- libtls13 does not keep the certificates' DER bytes, so watch its
+	-- decoder for the first one parsed as a certificate: the server's own
+	-- (leaf) certificate, whose key the handshake verifies.
+	local asn, x509 = require("tls13.asn"), require("tls13.x509")
+	local decode, parseCert = asn.decode, x509.parseCertificateFromAsn
+	local derOf, leafDer = setmetatable({}, { __mode = "k" }), nil
+	asn.decode = function(der, ...)
+		local result, decodeErr = decode(der, ...)
+		if type(result) == "table" then derOf[result] = der end
+		return result, decodeErr
+	end
+	x509.parseCertificateFromAsn = function(certAsn, ...)
+		leafDer = leafDer or derOf[certAsn]
+		return parseCert(certAsn, ...)
 	end
 
-	local stream, err = tls.wrapRaw(raw, profile, {
+	local okWrap, stream, err = pcall(tls.wrapRaw, raw, platform.tlsProfile(tls), {
 		serverName = not isIpLiteral(u.host) and u.host or nil,
 		alpnProtocol = "http/1.1",
 	})
-	if not stream then
+	asn.decode, x509.parseCertificateFromAsn = decode, parseCert
+	if not okWrap then err = stream end
+	if not okWrap or not stream then
 		raw.close()
 		return nil, "TLS handshake failed: " .. tostring(err)
 	end
 
-	local fingerprint = serverKey and hex(require("tls13.crypto.hash.sha2").sha256():update(serverKey):finish())
+	-- Same form as `openssl x509 -noout -fingerprint -sha256`, minus colons.
+	local fingerprint = leafDer and hex(require("tls13.crypto.hash.sha2").sha256():update(leafDer):finish())
 	conn.fingerprint = fingerprint
 	local pin = tlsOpts.fingerprint
 	if pin and pin:lower():gsub("[^%x]", "") ~= fingerprint then
 		raw.close()
-		return nil, ("server key fingerprint %s does not match the pinned one"):format(tostring(fingerprint))
+		return nil, ("server certificate fingerprint %s does not match the pinned one"):format(tostring(fingerprint))
 	end
 
 	local reader = coroutine.create(function()
@@ -662,7 +663,9 @@ end
 ---  sendTimeout    seconds send() waits for a full socket buffer (default 10)
 ---  onPong         function(payload) called for each pong
 ---  internet       internet card proxy (default: the primary one)
----  tls            for wss://: { fingerprint = "<sha256 of the server's public key, hex>" }
+---  tls            for wss://: { fingerprint = "<server certificate's SHA-256>" }, as
+---                 `openssl x509 -noout -fingerprint -sha256` prints it; once
+---                 connected, conn.fingerprint holds the server's
 ---@param url string ws://host[:port][/path] or wss://...
 ---@param opts? table
 ---@return table|nil connection, string? err

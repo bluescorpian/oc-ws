@@ -1,3 +1,4 @@
 node_modules/
 .direnv/
 tests/autobahn/reports/
+tests/tls/.cache/

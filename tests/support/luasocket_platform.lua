@@ -8,7 +8,8 @@ local socket = require("socket")
 local MAX_READ = 2048
 
 local function newSocket(host, port)
-	local tcp = assert(socket.tcp())
+	-- socket.tcp() picks the family on connect, so "localhost" may go to ::1.
+	local tcp = assert((socket.tcp4 or socket.tcp)())
 	tcp:settimeout(0)
 	local _, err = tcp:connect(host, port)
 	local state = (err == nil) and "connected" or "connecting"
