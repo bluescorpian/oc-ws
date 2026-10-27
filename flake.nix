@@ -17,6 +17,8 @@
             pkgs.lua53Packages.luacheck
             pkgs.nodejs
             pkgs.pnpm
+            pkgs.openssl
+            pkgs.zip
           ];
         };
 

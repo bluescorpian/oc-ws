@@ -3,3 +3,4 @@ node_modules/
 tests/autobahn/reports/
 tests/tls/.cache/
 tests/ocemu/.cache/
+tests/ingame/.cache/
