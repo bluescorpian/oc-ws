@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+
+jobs:
+  # Everything runs in the flake's dev shells, so CI uses the same Lua 5.3
+  # and tools as local development.
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - run: nix develop -c luacheck .
+      - run: nix develop -c busted tests/unit
+
+  autobahn:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - run: nix develop -c tests/autobahn/run.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: autobahn-report
+          path: tests/autobahn/reports/clients
+
+  tls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - run: nix develop -c tests/tls/run.sh
+
+  ocemu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - run: nix develop .#ocemu -c tests/ocemu/run.sh
