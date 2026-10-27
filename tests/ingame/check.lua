@@ -42,9 +42,10 @@ local function echoes(conn, label)
 	local data, kind = conn:receive(10)
 	check(label .. ": text echo", data == "hello " .. label and kind == "text", data or kind)
 	local blob = ("\0\1\254\255"):rep(16 * 1024)
-	conn:send(blob, true)
-	data, kind = conn:receive(30)
-	check(label .. ": 64 KiB binary echo", data == blob and kind == "binary", data and #data or kind)
+	local sent, sendErr = conn:send(blob, true)
+	if sent then data, kind = conn:receive(30) end
+	check(label .. ": 64 KiB binary echo", data == blob and kind == "binary",
+		not sent and ("send: " .. tostring(sendErr)) or data and #data or kind)
 	say(("     %s: both echoes took %.2fs"):format(label, computer.uptime() - t))
 end
 
@@ -92,7 +93,9 @@ else
 		check(label .. ": connects with the pinned certificate", c ~= nil, cerr)
 		if c then
 			say(("     %s: handshake took %.2fs, %d KiB free"):format(label, computer.uptime() - t, freeKiB()))
-			echoes(c, label)
+			-- oc-ws should report failures, not raise them; count a raise and go on.
+			local okEcho, echoErr = pcall(echoes, c, label)
+			check(label .. ": echoes run without raising an error", okEcho, echoErr)
 			c:close()
 			check(label .. ": closes with 1000", c.closeCode == 1000, c.closeCode)
 		end

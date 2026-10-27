@@ -12,6 +12,7 @@ local GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 -- the wait.
 local POLL_INTERVAL = 0.1
 local MAX_HANDSHAKE_SIZE = 16384
+local TLS_RECORD_SIZE = 16384 -- largest TLS 1.3 record plaintext
 local WOULD_BLOCK = {}
 
 local OP = { CONTINUATION = 0x0, TEXT = 0x1, BINARY = 0x2, CLOSE = 0x8, PING = 0x9, PONG = 0xA }
@@ -312,8 +313,14 @@ local function tlsTransport(conn, sock, u, tlsOpts, deadline)
 		if data == nil then return nil, readErr or "connection closed" end
 		return data
 	end
+	-- At most one TLS record per call: libtls13 encrypts every record of a
+	-- write before sending any, and flush() already loops over partial writes.
+	-- An error inside libtls13 (OpenComputers' memory limit, typically) leaves
+	-- the TLS state unknown, so it ends the connection like a read error does.
 	function t.write(data)
-		local n, writeErr = stream:write(data)
+		if #data > TLS_RECORD_SIZE then data = data:sub(1, TLS_RECORD_SIZE) end
+		local ok, n, writeErr = pcall(stream.write, stream, data)
+		if not ok then return nil, tostring(n) end
 		if not n then return nil, tostring(writeErr) end
 		return n
 	end
