@@ -20,30 +20,11 @@ if [ ! -f "$cache/$oc_jar" ]; then
 fi
 echo "$oc_sha256  $cache/$oc_jar" | sha256sum -c --quiet
 
-inst="$cache/instance"
-rm -rf "$inst"
-mkdir -p "$inst/.minecraft/mods" "$inst/.minecraft/config/opencomputers"
-cp "$cache/$oc_jar" "$inst/.minecraft/mods/"
-
-cat >"$inst/instance.cfg" <<'EOF'
-InstanceType=OneSix
-name=oc-ws test
-EOF
-
-cat >"$inst/mmc-pack.json" <<'EOF'
-{
-  "components": [
-    { "uid": "net.minecraft", "version": "1.12.2", "important": true },
-    { "uid": "net.minecraftforge", "version": "14.23.5.2860" }
-  ],
-  "formatVersion": 1
-}
-EOF
-
 # Merged over OpenComputers' defaults: computers need no power, and the
 # internet filter lets them reach 127.0.0.1. The version must match the mod's,
 # or OC treats the file as pre-1.8.3 and migrates the filter rules away.
-cat >"$inst/.minecraft/config/opencomputers/settings.conf" <<'EOF'
+# server.sh copies the same file into the dedicated server.
+cat >"$cache/settings.conf" <<'EOF'
 opencomputers {
   version: "1.8.10"
   power {
@@ -57,6 +38,27 @@ opencomputers {
       "allow default"
     ]
   }
+}
+EOF
+
+inst="$cache/instance"
+rm -rf "$inst"
+mkdir -p "$inst/.minecraft/mods" "$inst/.minecraft/config/opencomputers"
+cp "$cache/$oc_jar" "$inst/.minecraft/mods/"
+cp "$cache/settings.conf" "$inst/.minecraft/config/opencomputers/settings.conf"
+
+cat >"$inst/instance.cfg" <<'EOF'
+InstanceType=OneSix
+name=oc-ws test
+EOF
+
+cat >"$inst/mmc-pack.json" <<'EOF'
+{
+  "components": [
+    { "uid": "net.minecraft", "version": "1.12.2", "important": true },
+    { "uid": "net.minecraftforge", "version": "14.23.5.2860" }
+  ],
+  "formatVersion": 1
 }
 EOF
 

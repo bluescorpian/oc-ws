@@ -18,6 +18,7 @@
             pkgs.nodejs
             pkgs.pnpm
             pkgs.openssl
+            pkgs.unzip
             pkgs.zip
           ];
         };

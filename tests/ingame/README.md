@@ -1,47 +1,61 @@
 # In-game check
 
-Runs `check.lua` on a real OpenComputers computer in single-player, against
-echo servers on this machine. It covers what the automated tiers can't: the
-`internet_ready` signal, OC's memory limits with libtls13 loaded, and P-256
-through a real tier 3 data card.
+Runs `check.lua` on a real OpenComputers computer against echo servers on
+this machine. It covers what the automated tiers can't: the `internet_ready`
+signal, OC's memory limits with libtls13 loaded, and P-256 through a real
+tier 3 data card.
 
-## Once: the Minecraft instance
+## Client (once)
 
 ```sh
 nix develop -c tests/ingame/instance.sh    # prints the zip's path
 nix run nixpkgs#prismlauncher
 ```
 
-In Prism Launcher: **Add Instance > Import**, pick the zip, sign in with your
-Microsoft account, and launch "oc-ws test". It is Minecraft 1.12.2 with Forge
-and OpenComputers 1.8.10. Its OpenComputers config lets computers reach
-`127.0.0.1` and run without power.
+In Prism Launcher: **Add Instance > Import**, pick the zip, and sign in with
+your Microsoft account. The instance is Minecraft 1.12.2 with Forge and
+OpenComputers 1.8.10.
 
-Create a **Creative** world. From the OpenComputers creative tab, place a
-**Computer Case (Creative)** with a **Screen (Tier 3)** next to it and a
-**Keyboard** on the screen. Put in the case:
-
-* CPU (Tier 3), two Memory (Tier 3.5), Hard Disk Drive (Tier 3)
-* Graphics Card (Tier 3), Internet Card, Data Card (Tier 3)
-* EEPROM (Lua BIOS), and the floppy "OpenOS (Operating System)"
-
-Turn it on, run `install` to copy OpenOS onto the hard disk, and reboot.
-
-## Each run
-
-On this machine, from the worktree with the code to test:
+## Ready-made world (recommended)
 
 ```sh
-nix develop -c tests/ingame/run.sh
+nix develop -c tests/ingame/server.sh          # --reset for a fresh world
 ```
 
-In the computer:
+This starts a Forge server in Docker (`oc-ws-mc`, flat creative world) and
+the echo servers. The first start downloads Forge and takes a few minutes.
+Launch the instance, join `localhost`, and the computer is in front of you:
+open the case, press the power button, and `check.lua` runs once OpenOS
+starts.
+
+The computer is a Computer Case (Creative) with a tier 3 screen, a keyboard,
+a tier 3 CPU, two tier 3.5 memory sticks, a tier 3 graphics card, an internet
+card, a tier 3 data card and the Lua BIOS. Its hard drive already holds
+OpenOS, this checkout's `src/ws.lua`, libtls13 and `check.lua`, and its
+`.shrc` starts the check. Each `server.sh` start copies the current files
+onto the drive.
+
+Ctrl+C stops the echo servers. `nix develop -c tests/ingame/server.sh stop`
+stops Minecraft.
+
+## Your own world
+
+Create a creative single-player world in the instance (its config lets
+computers reach `127.0.0.1` and run without power) and build the computer
+above, with the floppy "OpenOS (Operating System)" in place of the prepared
+drive. Run `install` to copy OpenOS onto the hard disk and reboot. Then:
 
 ```sh
-wget -f http://127.0.0.1:8000/install.lua /home/install.lua
+nix develop -c tests/ingame/run.sh             # on this machine
+```
+
+```sh
+wget -f http://127.0.0.1:8000/install.lua /home/install.lua   # in the computer
 /home/install.lua
 /home/check.lua
 ```
+
+## Reading the results
 
 `check.lua` prints each result and saves them to `/home/check.txt`. Things
 worth trying:
