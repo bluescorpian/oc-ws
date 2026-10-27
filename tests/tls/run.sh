@@ -9,17 +9,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 cache="$PWD/tests/tls/.cache"
-libtls_rev=a6f05614200b274b6d4f6d3cac83662c42bc227a
-
-if [ ! -d "$cache/libtls/$libtls_rev" ]; then
-	rm -rf "$cache/libtls"
-	git clone -q --filter=blob:none --no-checkout https://github.com/OpenPrograms/Fingercomp-Programs.git "$cache/libtls/repo"
-	git -C "$cache/libtls/repo" sparse-checkout set libtls13/src
-	git -C "$cache/libtls/repo" checkout -q "$libtls_rev"
-	mkdir -p "$cache/libtls/$libtls_rev"
-	ln -s "$cache/libtls/repo/libtls13/src" "$cache/libtls/$libtls_rev/tls13"
-fi
-export LIBTLS13_DIR="$cache/libtls/$libtls_rev"
+LIBTLS13_DIR=$(tests/support/libtls13.sh "$cache")
+export LIBTLS13_DIR
 
 (cd tests/server && pnpm install --frozen-lockfile --silent)
 
