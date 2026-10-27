@@ -22,6 +22,12 @@ image=itzg/minecraft-server:2026.10.0-java8
 hdd=0c0c0c0c-0000-4000-8000-0000000000aa
 oc_jar=OpenComputers-MC1.12.2-1.8.10+258943363.jar
 
+# Before touching the server, so a port clash fails without restarting it.
+if [ "${1:-}" != stop ]; then
+	tests/ingame/instance.sh >/dev/null
+	tests/ingame/prepare.sh
+fi
+
 # Stop first: OpenComputers writes its buffered copy of the drive back on save,
 # which would overwrite the files copied below.
 if docker container inspect "$name" >/dev/null 2>&1; then
@@ -31,9 +37,6 @@ if docker container inspect "$name" >/dev/null 2>&1; then
 fi
 [ "${1:-}" = stop ] && exit 0
 [ "${1:-}" = --reset ] && rm -rf "$world"
-
-tests/ingame/instance.sh >/dev/null
-tests/ingame/prepare.sh
 
 mkdir -p "$data/mods" "$data/config/opencomputers"
 rm -f "$data"/mods/OpenComputers-*.jar

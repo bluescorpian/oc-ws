@@ -2,8 +2,17 @@
 # Builds what the in-game computer runs, in tests/ingame/.cache/files: this
 # checkout's src/ws.lua, libtls13, check.lua, install.lua, pins for the test
 # certificates (made once, in .cache/certs), and manifest.txt mapping each
-# file to its path in OpenOS. Used by run.sh and server.sh.
+# file to its path in OpenOS. Used by run.sh and server.sh, so it also checks
+# up front that the echo servers' ports are free.
 set -euo pipefail
+
+for port in 8000 8080 8443 8444; do
+	if (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+		echo "port $port is already in use, probably by another run.sh or server.sh; stop that first:" >&2
+		ss -ltnp "sport = :$port" >&2 || true
+		exit 1
+	fi
+done
 
 cd "$(dirname "$0")/../.."
 cache="$PWD/tests/ingame/.cache"
