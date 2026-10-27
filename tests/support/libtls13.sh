@@ -4,7 +4,9 @@
 # Usage: dir=$(tests/support/libtls13.sh <cache dir>)
 set -euo pipefail
 
-cache=$1
+# Absolute, since the symlink below is resolved relative to where it lives.
+mkdir -p "$1"
+cache=$(cd "$1" && pwd)
 rev=a6f05614200b274b6d4f6d3cac83662c42bc227a
 
 if [ ! -d "$cache/libtls/$rev" ]; then
