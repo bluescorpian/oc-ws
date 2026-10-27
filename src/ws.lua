@@ -366,13 +366,11 @@ function Connection:closeTransport()
 	self:stopListening()
 end
 
--- The TCP connection ended. Whether that was clean depends on whether the
--- closing handshake had already finished.
+-- The TCP connection ended before a Close frame arrived, which RFC 6455
+-- section 7.1.5 reports as 1006.
 function Connection:lost(err)
 	if self.state ~= "closed" then
-		if not self.closeCode then
-			self.closeCode, self.closeReason = 1006, err or "connection lost"
-		end
+		self.closeCode, self.closeReason = 1006, err or "connection lost"
 		self:closeTransport()
 		self:deliverClose()
 	end
@@ -529,6 +527,7 @@ function Connection:step()
 		if self.eof and not more then self:lost(self.eof) end
 	end
 	if self.state == "closing" and platform.uptime() >= self.closeDeadline then
+		self.closeCode, self.closeReason = 1006, "server did not answer the close"
 		self:closeTransport()
 		self:deliverClose()
 	end
@@ -599,8 +598,6 @@ function Connection:close(code, reason)
 	if self.state == "open" then
 		self.state = "closing"
 		self.closeDeadline = platform.uptime() + self.closeTimeout
-		-- Replaced by the server's code when it answers.
-		self.closeCode, self.closeReason = code, reason
 		self.outq = self.outq .. encodeFrame(OP.CLOSE, string.pack(">I2", code) .. reason)
 		while self.state ~= "closed" do
 			self:pump()
