@@ -19,6 +19,21 @@
             pkgs.pnpm
           ];
         };
+
+        # For tests/ocemu/run.sh: OCEmu loads SDL2 through luaffi, which the
+        # script builds with luarocks. OCEmu is written for Lua 5.2 and calls
+        # math.pow, so its Lua 5.3 needs the 5.2 compatibility functions.
+        ocemu = pkgs.mkShell {
+          packages = [
+            (pkgs.lua5_3_compat.withPackages (ps: [ ps.luarocks ps.luafilesystem ps.luautf8 ps.luasocket ]))
+            pkgs.gcc
+            pkgs.nodejs
+            pkgs.pnpm
+          ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.SDL2 ];
+          SDL_VIDEODRIVER = "dummy";
+          SDL_AUDIODRIVER = "dummy";
+        };
       });
     };
 }

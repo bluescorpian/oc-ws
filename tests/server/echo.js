@@ -1,10 +1,14 @@
-// wss:// echo server for tests/tls/run.sh. Usage: node tls-echo.js <key> <cert> <port>
+// Echo server for the OCEmu and wss:// checks.
+// Usage: node echo.js <port> [<key> <cert>]   (with key and cert it serves wss://)
 import { readFileSync } from 'fs';
-import { createServer } from 'https';
+import { createServer as createHttp } from 'http';
+import { createServer as createHttps } from 'https';
 import { WebSocketServer } from 'ws';
 
-const [key, cert, port] = process.argv.slice(2);
-const server = createServer({ key: readFileSync(key), cert: readFileSync(cert), minVersion: 'TLSv1.3' });
+const [port, key, cert] = process.argv.slice(2);
+const server = key
+	? createHttps({ key: readFileSync(key), cert: readFileSync(cert), minVersion: 'TLSv1.3' })
+	: createHttp();
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {

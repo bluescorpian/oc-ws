@@ -1,4 +1,4 @@
--- wss:// checks against tests/server/tls-echo.js. Run through tests/tls/run.sh.
+-- wss:// checks against tests/server/echo.js. Run through tests/tls/run.sh.
 local libtls = assert(os.getenv("LIBTLS13_DIR"), "LIBTLS13_DIR not set")
 package.path = table.concat({ "src/?.lua", "tests/support/?.lua", libtls .. "/?.lua", libtls .. "/?/init.lua", package.path }, ";")
 local ws = require("ws")

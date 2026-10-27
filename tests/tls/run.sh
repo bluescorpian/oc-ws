@@ -38,7 +38,7 @@ for keytype in rsa:2048 ec:secp384r1; do
 			-keyout "$dir/key.pem" -out "$dir/cert.pem" 2>/dev/null
 	fi
 
-	node tests/server/tls-echo.js "$dir/key.pem" "$dir/cert.pem" "$port" &
+	node tests/server/echo.js "$port" "$dir/key.pem" "$dir/cert.pem" &
 	server=$!
 	for _ in $(seq 50); do
 		if (echo >/dev/tcp/127.0.0.1/$port) 2>/dev/null; then break; fi
